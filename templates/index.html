@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Testador de Compressão PDF</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; padding-top: 20px; }
+        .card { margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .result-card { background-color: #e8f5e9; }
+        .stat-box { background-color: white; border-radius: 8px; padding: 15px; margin: 10px 0; }
+        .alert { margin-top: 20px; }
+        .instructions { background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <!-- Cabeçalho -->
+                <div class="text-center mb-4">
+                    <h1 class="text-primary">Testador de Compressão PDF</h1>
+                    <p class="lead">Comprime PDFs usando Ghostscript sem perda de qualidade visível</p>
+                </div>
+
+                <!-- Avisos -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ 'danger' if category == 'error' else 'warning' if category == 'warning' else 'success' }} alert-dismissible fade show">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <!-- Instruções Ghostscript -->
+                {% if not ghostscript_installed %}
+                <div class="instructions">
+                    <h4>⚠️ Ghostscript Não Encontrado</h4>
+                    <p>Para usar esta ferramenta, instale o Ghostscript primeiro:</p>
+                    <ul>
+                        <li><strong>Windows:</strong> Baixe do <a href="https://ghostscript.com/releases/gsdnld.html" target="_blank">site oficial</a></li>
+                        <li><strong>macOS:</strong> <code>brew install ghostscript</code></li>
+                        <li><strong>Linux (Debian/Ubuntu):</strong> <code>sudo apt install ghostscript</code></li>
+                        <li><strong>Linux (Fedora):</strong> <code>sudo dnf install ghostscript</code></li>
+                    </ul>
+                    <p class="mb-0">Após instalar, reinicie esta aplicação.</p>
+                </div>
+                {% endif %}
+
+                <!-- Formulário de Upload -->
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Comprimir PDF</h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST" enctype="multipart/form-data">
+                            <!-- Seleção de Arquivo -->
+                            <div class="mb-3">
+                                <label for="pdf_file" class="form-label">Selecione um arquivo PDF</label>
+                                <input type="file" class="form-control" id="pdf_file" name="pdf_file" accept=".pdf" required>
+                                <div class="form-text">Tamanho máximo: 50MB</div>
+                            </div>
+
+                            <!-- Perfil de Compressão -->
+                            <div class="mb-3">
+                                <label class="form-label">Perfil de Compressão</label>
+                                {% for key, profile in profiles.items() %}
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="radio" name="profile" 
+                                           id="profile_{{ key }}" value="{{ key }}" 
+                                           {{ 'checked' if key == 'ebook' }}>
+                                    <label class="form-check-label" for="profile_{{ key }}">
+                                        <strong>{{ profile.name }}</strong> - {{ profile.description }}
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+
+                            <!-- Botão de Envio -->
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                <button type="submit" class="btn btn-primary" 
+                                        {{ 'disabled' if not ghostscript_installed }}>
+                                    Comprimir PDF
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Resultados -->
+                {% if results %}
+                <div class="card result-card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">Resultados da Compressão</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Estatísticas -->
+                        <div class="row text-center">
+                            <div class="col-md-4">
+                                <div class="stat-box">
+                                    <h6>Original</h6>
+                                    <h4 class="text-muted">{{ results.original_size }}</h4>
+                                    <small class="text-muted">{{ results.original_name }}</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="stat-box">
+                                    <h6>Comprimido</h6>
+                                    <h4 class="text-success">{{ results.compressed_size }}</h4>
+                                    <small class="text-muted">{{ results.compressed_name }}</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="stat-box">
+                                    <h6>Redução</h6>
+                                    <h4 class="text-danger">{{ results.reduction }}</h4>
+                                    <small class="text-muted">{{ results.profile_used }}</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Botões de Ação -->
+                        <div class="d-flex justify-content-between mt-4">
+                            <a href="{{ url_for('download_file', filename=results.compressed_name) }}" 
+                               class="btn btn-success">
+                                📥 Baixar PDF Comprimido
+                            </a>
+                            <form method="POST" action="{{ url_for('cleanup') }}">
+                                <button type="submit" class="btn btn-outline-danger">
+                                    🗑️ Limpar Arquivos
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Informações -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Como Funciona</h5>
+                    </div>
+                    <div class="card-body">
+                        <p>Esta ferramenta usa o <strong>Ghostscript</strong> para recompressão inteligente de PDFs:</p>
+                        <ul>
+                            <li><strong>Prepress:</strong> Mantém alta qualidade para impressão profissional</li>
+                            <li><strong>E-book:</strong> Equilíbrio ideal entre qualidade e tamanho</li>
+                            <li><strong>Tela:</strong> Compressão máxima para uso na web</li>
+                        </ul>
+                        <p class="mb-0"><small>Os PDFs originais e comprimidos são armazenados temporariamente e podem ser removidos com o botão "Limpar Arquivos".</small></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
