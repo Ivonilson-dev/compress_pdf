@@ -2,7 +2,9 @@
 FROM python:3.13-slim
 
 # 1. Instale o Ghostscript usando apt-get (agora funciona dentro do Docker)
-RUN apt-get update && apt-get install -y --no-install-recommends ghostscript && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -o Debug::pkgProblemResolver=yes 2>&1 | grep -v "NO_PUBKEY" && \
+apt-get install -y --no-install-recommends ghostscript && \
+rm -rf /var/lib/apt/lists/*
 
 # 2. Configure o diretório de trabalho dentro do container
 WORKDIR /app
