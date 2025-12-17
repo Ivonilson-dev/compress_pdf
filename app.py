@@ -34,28 +34,37 @@ COMPRESSION_PROFILES = {
 }
 
 def get_ghostscript_command():
-    """Detecta automaticamente o comando Ghostscript baseado no sistema operacional"""
-    # Caminhos fixos para tentar no Windows - AJUSTE SE NECESSÁRIO
-    windows_paths = [
-        r'C:\Program Files\gs\gs10.06.0\bin\gswin64c.exe',  # Caminho padrão 64-bit
-        r'C:\Program Files (x86)\gs\gs10.06.0\bin\gswin32c.exe',  # Caminho padrão 32-bit
-        'gswin64c.exe',  # Tenta pelo PATH do sistema
-        'gswin32c.exe'
-    ]
-    
-    for cmd in windows_paths:
+    """Detecta automaticamente o comando Ghostscript."""
+    import platform
+    sistema = platform.system()
+
+    # Ordem de tentativas: Linux (gs) -> Windows (gswin64c)
+    if sistema == "Linux":
+        # No Linux, tenta apenas o comando padrão 'gs'
+        comandos = ['gs']
+    else:
+        # Fallback para Windows (útil se testar localmente)
+        comandos = ['gswin64c.exe', 'gswin32c.exe', 'gs.exe']
+
+    for cmd in comandos:
         try:
-            # Testa se o comando existe e pode ser executado
-            result = subprocess.run([cmd, '--version'], 
-                                  capture_output=True, 
-                                  text=True,
-                                  timeout=2)
-            if result.returncode == 0:
-                return cmd
-        except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+            # Testa se o comando existe e funciona
+            resultado = subprocess.run([cmd, '--version'],
+                                       capture_output=True,
+                                       text=True,
+                                       timeout=5)
+            if resultado.returncode == 0:
+                # Retorna o caminho completo, se possível
+                import shutil
+                full_path = shutil.which(cmd) or cmd
+                print(f"[DEBUG] Ghostscript encontrado em: {full_path}")  # Log útil
+                return full_path
+        except (FileNotFoundError, OSError, subprocess.TimeoutExpired) as e:
+            print(f"[DEBUG] Comando '{cmd}' não encontrado: {e}")
             continue
-    
-    return None
+
+    # Se nenhum comando funcionar
+    raise Exception("ERRO: Ghostscript não encontrado. Verifique se está instalado no sistema. O caminho esperado no Linux é 'gs'.")
 
 def compress_pdf(input_path, output_path, profile):
     """Compressa um PDF usando Ghostscript"""
